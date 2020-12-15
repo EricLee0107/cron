@@ -11,35 +11,39 @@ import (
 // specified by the schedule. It may be started, stopped, and the entries may
 // be inspected while running.
 type Cron struct {
-	entries   []*Entry
-	chain     Chain
-	stop      chan struct{}
-	add       chan *Entry
-	remove    chan EntryID
-	snapshot  chan chan []Entry
-	running   bool
-	logger    Logger
-	runningMu sync.Mutex
-	location  *time.Location
-	parser    ScheduleParser
-	nextID    EntryID
-	jobWaiter sync.WaitGroup
+	entries   []*Entry          // 存储所有的任务
+	chain     Chain             // 当前cron所使用的封装接口（所有job需要在调用前先调用chain）
+	stop      chan struct{}     // 一个空结构的通道，用于接收停止信号
+	add       chan *Entry       // 一个*Entry的通道，用于接收在cron运行过程中新加入的任务的信号
+	remove    chan EntryID      // 一个EnteryID的通道，用于接收cron在运行中移除某个任务的信号
+	snapshot  chan chan []Entry // 一个用于临时检查当前cron运行的所有任务条目的备份
+	running   bool              // 当前cron的运行状态
+	logger    Logger            // 指定log打印接口
+	runningMu sync.Mutex        // 运行锁
+	location  *time.Location    // 时区信息
+	parser    ScheduleParser    // 时间规范解析器（用于指定时间格式）
+	nextID    EntryID           // 任务ID标识，用于在生成新的任务是给任务指定ID，任务ID可以用于删除任务（remove的EntryID）
+	jobWaiter sync.WaitGroup    // 任务计数器，保证任务启动的goroutinue在cron关闭时全部执行完成
 }
 
 // ScheduleParser is an interface for schedule spec parsers that return a Schedule
+// 一个时间格式解释器接口，返回一个Schedule. 接口的具体实现类为Parser 参见parser.go
 type ScheduleParser interface {
 	Parse(spec string) (Schedule, error)
 }
 
 // Job is an interface for submitted cron jobs.
+// 一个用于执行任务对应函数方法的接口， 接口的具体实现类为FuncJob, 参见 cron.go
 type Job interface {
 	Run()
 }
 
 // Schedule describes a job's duty cycle.
+// Schedule 描述一个任务的执行周期
 type Schedule interface {
 	// Next returns the next activation time, later than the given time.
 	// Next is invoked initially, and then each time the job is run.
+	// Next返回比当前时间完的下一个激活时间，在开始时执行一次Next，每次任务执行时会再次执行Next
 	Next(time.Time) time.Time
 }
 
@@ -57,17 +61,21 @@ type Entry struct {
 
 	// Next time the job will run, or the zero time if Cron has not been
 	// started or this entry's schedule is unsatisfiable
+	// 下次执行时间
 	Next time.Time
 
 	// Prev is the last time this job was run, or the zero time if never.
+	// 上次运行时间，如果是0则代表未运行过
 	Prev time.Time
 
 	// WrappedJob is the thing to run when the Schedule is activated.
+	// 已经被Chain封装过的任务
 	WrappedJob Job
 
 	// Job is the thing that was submitted to cron.
 	// It is kept around so that user code that needs to get at the job later,
 	// e.g. via Entries() can do so.
+	// 未被Chain封装过的任务（传入到cron中的func）
 	Job Job
 }
 
@@ -76,6 +84,8 @@ func (e Entry) Valid() bool { return e.ID != 0 }
 
 // byTime is a wrapper for sorting the entry array by time
 // (with zero time at the end).
+
+// 自定义sort接口排序规则
 type byTime []*Entry
 
 func (s byTime) Len() int      { return len(s) }
