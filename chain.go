@@ -17,6 +17,7 @@ type Chain struct {
 }
 
 // NewChain returns a Chain consisting of the given JobWrappers.
+// 生成一个封装器
 func NewChain(c ...JobWrapper) Chain {
 	return Chain{c}
 }
@@ -27,6 +28,7 @@ func NewChain(c ...JobWrapper) Chain {
 //     NewChain(m1, m2, m3).Then(job)
 // is equivalent to:
 //     m1(m2(m3(job)))
+// 让Job进行封装器封装，返回封装后的Job
 func (c Chain) Then(j Job) Job {
 	for i := range c.wrappers {
 		j = c.wrappers[len(c.wrappers)-i-1](j)
@@ -35,6 +37,7 @@ func (c Chain) Then(j Job) Job {
 }
 
 // Recover panics in wrapped jobs and log them with the provided logger.
+// 恢复封装器引发的panic，并输出日志
 func Recover(logger Logger) JobWrapper {
 	return func(j Job) Job {
 		return FuncJob(func() {
@@ -58,6 +61,7 @@ func Recover(logger Logger) JobWrapper {
 // DelayIfStillRunning serializes jobs, delaying subsequent runs until the
 // previous one is complete. Jobs running after a delay of more than a minute
 // have the delay logged at Info.
+// 序列化任务，当上一个任务未执行完是后面的任务会延时执行，直到上一个任务执行完成。延迟超过1min的任务将会被打印Info记录到日志中。
 func DelayIfStillRunning(logger Logger) JobWrapper {
 	return func(j Job) Job {
 		var mu sync.Mutex
@@ -75,6 +79,7 @@ func DelayIfStillRunning(logger Logger) JobWrapper {
 
 // SkipIfStillRunning skips an invocation of the Job if a previous invocation is
 // still running. It logs skips to the given logger at Info level.
+// 当一个任务要执行时，如果上一个任务仍然未执行完，则跳过这个任务的此次调度，并且将信息输出到Info日志中
 func SkipIfStillRunning(logger Logger) JobWrapper {
 	return func(j Job) Job {
 		var ch = make(chan struct{}, 1)

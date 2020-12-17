@@ -4,6 +4,16 @@ import (
 	"time"
 )
 
+
+// option 主要是提供一些对Cron可变选项的修改，
+// 包括:
+// 设置时区（WithLocation)
+// 修改默认时间解释器（改为增加秒，WithSeconds）
+// 重写时间解释器，自行传入解释器格式（WithParser）
+// 重写任务封装器（WithChain）,默认是不进行封装的
+// 重定义日志接口（WithLogger）
+
+
 // Option represents a modification to the default behavior of a Cron.
 type Option func(*Cron)
 

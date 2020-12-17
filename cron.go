@@ -120,6 +120,7 @@ func (s byTime) Less(i, j int) bool {
 //     Default:     A chain that recovers panics and logs them to stderr.
 //
 // See "cron.With*" to modify the default behavior.
+// 创建一个新的Cron
 func New(opts ...Option) *Cron {
 	c := &Cron{
 		entries:   nil,
@@ -141,6 +142,7 @@ func New(opts ...Option) *Cron {
 }
 
 // FuncJob is a wrapper that turns a func() into a cron.Job
+// Job接口的具体实现类
 type FuncJob func()
 
 func (f FuncJob) Run() { f() }
@@ -148,6 +150,9 @@ func (f FuncJob) Run() { f() }
 // AddFunc adds a func to the Cron to be run on the given schedule.
 // The spec is parsed using the time zone of this Cron instance as the default.
 // An opaque ID is returned that can be used to later remove it.
+// 添加一个func到Cron中，该func将在给定的schedule指定时间被Cron调用
+// 如果spec没有指定时区则会使用Cron的时区作为默认时区（cron时区可以在创建Cron时指定）
+// 返回一个EntryID,用于删除任务
 func (c *Cron) AddFunc(spec string, cmd func()) (EntryID, error) {
 	return c.AddJob(spec, FuncJob(cmd))
 }
@@ -155,6 +160,7 @@ func (c *Cron) AddFunc(spec string, cmd func()) (EntryID, error) {
 // AddJob adds a Job to the Cron to be run on the given schedule.
 // The spec is parsed using the time zone of this Cron instance as the default.
 // An opaque ID is returned that can be used to later remove it.
+// 同AddFunc，只是将cmd强转为了Job接口类型
 func (c *Cron) AddJob(spec string, cmd Job) (EntryID, error) {
 	schedule, err := c.parser.Parse(spec)
 	if err != nil {
@@ -165,6 +171,7 @@ func (c *Cron) AddJob(spec string, cmd Job) (EntryID, error) {
 
 // Schedule adds a Job to the Cron to be run on the given schedule.
 // The job is wrapped with the configured Chain.
+// 添加一个任务到Cron中，这个任务将按照给定的计划（时间节点）执行，执行的任务时已经被封装过的Job（cron.chain指定的函数对Job进行封装）
 func (c *Cron) Schedule(schedule Schedule, cmd Job) EntryID {
 	c.runningMu.Lock()
 	defer c.runningMu.Unlock()
@@ -184,6 +191,7 @@ func (c *Cron) Schedule(schedule Schedule, cmd Job) EntryID {
 }
 
 // Entries returns a snapshot of the cron entries.
+// 返回cron所有任务的快照
 func (c *Cron) Entries() []Entry {
 	c.runningMu.Lock()
 	defer c.runningMu.Unlock()
@@ -196,11 +204,13 @@ func (c *Cron) Entries() []Entry {
 }
 
 // Location gets the time zone location
+// 获取Cron的时区信息
 func (c *Cron) Location() *time.Location {
 	return c.location
 }
 
 // Entry returns a snapshot of the given entry, or nil if it couldn't be found.
+// 获取当前cron指定EntryID的任务详细信息
 func (c *Cron) Entry(id EntryID) Entry {
 	for _, entry := range c.Entries() {
 		if id == entry.ID {
@@ -211,6 +221,7 @@ func (c *Cron) Entry(id EntryID) Entry {
 }
 
 // Remove an entry from being run in the future.
+// 从Cron中删除一个任务
 func (c *Cron) Remove(id EntryID) {
 	c.runningMu.Lock()
 	defer c.runningMu.Unlock()
@@ -222,6 +233,7 @@ func (c *Cron) Remove(id EntryID) {
 }
 
 // Start the cron scheduler in its own goroutine, or no-op if already started.
+// 在一个单独的goroutine中启动Cron，如果cron已启动则 no-op
 func (c *Cron) Start() {
 	c.runningMu.Lock()
 	defer c.runningMu.Unlock()
@@ -233,6 +245,7 @@ func (c *Cron) Start() {
 }
 
 // Run the cron scheduler, or no-op if already running.
+// 运行一个Cron，非单独goroutine
 func (c *Cron) Run() {
 	c.runningMu.Lock()
 	if c.running {
