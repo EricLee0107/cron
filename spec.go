@@ -4,6 +4,7 @@ import "time"
 
 // SpecSchedule specifies a duty cycle (to the second granularity), based on a
 // traditional crontab specification. It is computed initially and stored as bit sets.
+// SpecSchedule是基于传统的crontab规范的一个指定的工作周期（精确到秒），在初始时被计算并且以位的形式存储起来。
 type SpecSchedule struct {
 	Second, Minute, Hour, Dom, Month, Dow uint64
 
@@ -12,12 +13,14 @@ type SpecSchedule struct {
 }
 
 // bounds provides a range of acceptable values (plus a map of name to value).
+// bounds 提供一个字段可接受的值范围，外加一个从名称到值的映射，允许字段值使用别名
 type bounds struct {
-	min, max uint
-	names    map[string]uint
+	min, max uint	// 值范围
+	names    map[string]uint // 别名对应的值
 }
 
 // The bounds for each field.
+// 每个字段的范围及可替代标识符
 var (
 	seconds = bounds{0, 59, nil}
 	minutes = bounds{0, 59, nil}
@@ -50,12 +53,21 @@ var (
 
 const (
 	// Set the top bit if a star was included in the expression.
+	// 如果表达式中包含星号，则设置顶部位
 	starBit = 1 << 63
 )
 
 // Next returns the next time this schedule is activated, greater than the given
 // time.  If no time can be found to satisfy the schedule, return the zero time.
+// Next 返回该调度给定时间之后的下次被激活时间。如果无法找到满足条件的时间则返回 zeroTime
 func (s *SpecSchedule) Next(t time.Time) time.Time {
+	// 对于普通的字段，对于月、日、时、分、秒，根据每个字段的取值范围循环检查字段值是否为复合时间调度周期的字段值，如果符合则判断先一个字段。
+	// 如果不符合则当前字段值递增（循环）检测下一个值是否满足当前字段的要求。
+	// 如果当前值的递增触发了其他段的变化（比如，增加到每分钟的最后一秒时就编程了下一分钟的第一秒，而下一分钟也可能是下一小时的第一分钟，以此类推），
+	// 所以当更高精度的字段返回到初始值（每月的1号，每天的0点，每小时的第一分钟，每分钟的第一秒）时，认为当前字段会影响到所有低精度变化，因此返回到第一个字段重新开始。
+	// 为什么不只向前返回一个字段？
+	// 因为如果向前返回一个字段发现前一个字段再次引发了前前个字段的变化，会导致逻辑多做一次检测（执行上一字段逻辑部分，直到一次循环的最后才发现已经引发了更高级的变化）
+	// 而且因为直接跳到最前面，无非是多了几次判断，并不回有太大的性能损耗。
 	// General approach
 	//
 	// For Month, Day, Hour, Minute, Second:
@@ -69,6 +81,9 @@ func (s *SpecSchedule) Next(t time.Time) time.Time {
 	// Save the original timezone so we can convert back after we find a time.
 	// Note that schedules without a time zone specified (time.Local) are treated
 	// as local to the time provided.
+
+	// 如果schedule给定了时区，则需要将给定时间转化为对应时区的时间，并且需要保存当前时间所记录的时区，方便找到对应时间点之后再次将时间转化为当前时间所记录的时区的时间。
+	// 如果schedule没有指定时区，则直接使用cron所设置的时区
 	origLocation := t.Location()
 	loc := s.Location
 	if loc == time.Local {
@@ -96,6 +111,7 @@ WRAP:
 	// If it's this month, then do nothing.
 	for 1<<uint(t.Month())&s.Month == 0 {
 		// If we have to add a month, reset the other parts to 0.
+		// 如果已经确定要进行月份的增加，那当前时间的其他信息已经没有了意义（增加月份后一定是在当前时间之后）
 		if !added {
 			added = true
 			// Otherwise, set the date at the beginning (since the current time is irrelevant).
